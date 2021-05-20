@@ -2,9 +2,9 @@
 
 import sys, getopt
 import datetime, os, subprocess
-import imp
 import netCDF4
 import numpy as np
+import pdb
 try:
     from OMtopogen import GMesh
 except:
@@ -291,7 +291,7 @@ def main(argv):
     # url,vx,vy,ve = 'http://thredds.socib.es/thredds/dodsC/ancillary_data/bathymetry/MED_GEBCO_30sec.nc','lon','lat','elevation'
     # url,vx,vy,ve = 'http://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NGDC/.ETOPO1/.z_bedrock/dods','lon','lat','z_bedrock'
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"hi:o:",["hgridfilename=","outputfilename=","no_changing_meta","open_channels","source_file=","source_lon=","source_lat=","source_elv="])
+        opts, args = getopt.getopt(sys.argv[1:],"hi:o:",["hgridfilename=","outputfilename=","no_changing_meta","open_channels","source_file=","source_lon=","source_lat=","source_elv=","plot"])
     except getopt.GetoptError as err:
         print(err)
         usage(scriptbasename)
@@ -339,8 +339,8 @@ def main(argv):
 
     source =""
     if(not no_changing_meta):
-        source =  source + scriptpath + " had git hash " + scriptgithash + scriptgitMod
-        source =  source + ". To obtain the grid generating code do: git clone  https://github.com/nikizadehgfdl/thin-wall-topography.git ; cd thin-wall-topography;  git checkout "+scriptgithash
+        source =  source + scriptpath + " had git hash " + scriptgithash + scriptgitMod 
+        source =  source + ". To obtain the grid generating code do: git clone  https://github.com/nikizadehgfdl/ocean_model_topog_generator.git ; cd ocean_model_topog_generator;  git checkout "+scriptgithash
 
     #Time it
     tic = time.perf_counter()
@@ -443,7 +443,8 @@ def main(argv):
         ax.gridlines()
         im = ax.pcolormesh(targ_lon,targ_lat,height_refsamp, transform=cartopy.crs.PlateCarree())
         plt.colorbar(im,ax=ax);
-
+        #pdb.set_trace()
+        plt.savefig('bathyPlot.png')
 
 if __name__ == "__main__":
     main(sys.argv[1:])
