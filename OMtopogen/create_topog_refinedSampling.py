@@ -2,7 +2,8 @@
 
 import sys, getopt
 import datetime, os, subprocess
-import netCDF4
+#import netCDF4
+import xarray as xr
 import numpy as np
 import pdb
 try:
@@ -38,11 +39,11 @@ def undo_break_array_to_blocks(a,xb=4,yb=1):
         ao = np.append(ao,a[3],axis=1)
         return ao
     else:
-        raise Exception('This rotuine can only make 2x2 blocks!')
-        ##Niki: Implement a better algo and lift this restriction
+        raise Exception('This routine can only make 2x2 blocks!')
+        ##TODO: Implement a better algorithm and lift this restriction
 
 def write_topog(h,hstd,hmin,hmax,xx,yy,fnam=None,format='NETCDF3_CLASSIC',description=None,history=None,source=None,no_changing_meta=None):
-    import netCDF4 as nc
+    #import netCDF4 as nc
 
     if fnam is None:
       fnam='topog.nc'
@@ -267,7 +268,7 @@ def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs, max_mb=8000):
     #print("Writing ...")
     #filename = 'topog_refsamp_BP.nc'+str(b)
     #write_topog(Glist[0].height,fnam=filename,no_changing_meta=True)
-    #print("haigts shape:", lons[b].shape,Hlist[b].shape)
+    #print("heights shape:", lons[b].shape,Hlist[b].shape)
     return Glist[0].height,D_std,Glist[0].h_min,Glist[0].h_max, hits
 
 
@@ -324,8 +325,9 @@ def main(argv):
 
 
     print("")
-    print("Generatin model topography for target grid ", gridfilename)
+    print("Generating model topography for target grid ", gridfilename)
     #Information to write in file as metadata
+    # TODO: What if git is not available? Someone installed from a tarball?
     scriptgithash = subprocess.check_output("cd "+scriptdirname +";git rev-parse HEAD; exit 0",stderr=subprocess.STDOUT,shell=True).decode('ascii').rstrip("\n")
     scriptgitMod  = subprocess.check_output("cd "+scriptdirname +";git status --porcelain "+scriptbasename+" | awk '{print $1}' ; exit 0",stderr=subprocess.STDOUT,shell=True).decode('ascii').rstrip("\n")
     if("M" in str(scriptgitMod)):
@@ -339,14 +341,18 @@ def main(argv):
 
     source =""
     if(not no_changing_meta):
-        source =  source + scriptpath + " had git hash " + scriptgithash + scriptgitMod 
+        source =  source + scriptpath + " had git hash " + scriptgithash + scriptgitMod
         source =  source + ". To obtain the grid generating code do: git clone  https://github.com/nikizadehgfdl/ocean_model_topog_generator.git ; cd ocean_model_topog_generator;  git checkout "+scriptgithash
 
     #Time it
     tic = time.perf_counter()
     # # Open and read the topographic dataset
     # Open a topography dataset, check that the topography is on a uniform grid.
-    topo_data = netCDF4.Dataset(url)
+    #topo_data = netCDF4.Dataset(url)
+    print('Opening',url)
+    topo_data = xr.open_dataset(url)
+    print('Finished opening',url)
+    pdb.set_trace()
 
     # Read coordinates of topography
     topo_lons = np.array( topo_data.variables[vx][:] )
