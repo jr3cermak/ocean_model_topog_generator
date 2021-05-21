@@ -113,8 +113,8 @@ def get_indices1D(lon_grid,lat_grid,x,y):
     latm=np.where(lats==lats.min())
     j0=latm[0][0]
     i0=lonm[0][0]
-    print(" wanted: ",x,y)
-    print(" got:    ",lon_grid[i0] , lat_grid[j0])
+    print(" wanted: %f %f" % (x,y))
+    print(" got:    %f %f" % (lon_grid[i0] , lat_grid[j0]))
     good=False
     if(abs(x-lon_grid[i0]) < abs(lon_grid[1]-lon_grid[0])):
         good=True
@@ -175,7 +175,9 @@ def extend_by_zeros(x,shape):
     ext[:x.shape[0],:x.shape[1]] = x
     return ext
 
-def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs, max_mb=8000):
+#def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs, max_mb=8000):
+# Reduce footprint to 4 GB
+def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs, max_mb=4000):
     print("  Doing block number ",part)
     print("  Target sub mesh shape: ",lon.shape)
 
@@ -190,7 +192,9 @@ def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs, max_mb=8000):
     ##Niki: This is only for efficeincy and we want to remove the constraint for the final product.
     ##Niki: But in some cases it may not work!
     #tis,tjs = slice(ti.min(), ti.max()+1,2), slice(tj.min(), tj.max()+1,2)
-    tis,tjs = slice(ti.min(), ti.max()+1,1), slice(tj.min(), tj.max()+1,1)
+    #tis,tjs = slice(ti.min(), ti.max()+1,1), slice(tj.min(), tj.max()+1,1)
+    tis,tjs = slice(ti.min().data.tolist(), ti.max().data.tolist()+1,1),\
+        slice(tj.min().data.tolist(), tj.max().data.tolist()+1,1)
     print('  Slices j,i:', tjs, tis )
 
     # Read elevation data
@@ -200,14 +204,19 @@ def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs, max_mb=8000):
     topo_lat = topo_lats[tjs]
 
     print('  Topo shape:', topo_elv.shape)
-    print('  topography longitude range:',topo_lon.min(),topo_lon.max())
-    print('  topography latitude  range:',topo_lat.min(),topo_lat.max())
+    #print('  topography longitude range:', topo_lon.min(), topo_lon.max())
+    #print('  topography latitude  range:', topo_lat.min(), topo_lat.max())
+    print('  topography longitude range: %f %f' % (topo_lon.min(), topo_lon.max()))
+    print('  topography latitude  range: %f %f' % (topo_lat.min(), topo_lat.max()))
 
-    print("  Target     longitude range:", lon.min(),lon.max())
-    print("  Target     latitude  range:", lat.min(),lat.max())
+    #print("  Target     longitude range:", lon.min(), lon.max())
+    #print("  Target     latitude  range:", lat.min(), lat.max())
+    print("  Target     longitude range: %f %f" % (lon.min(), lon.max()))
+    print("  Target     latitude  range: %f %f" % (lat.min(), lat.max()))
 
     # Refine grid by 2 till all source points are hit
     print("  Refining the target to hit all source points ...")
+    #pdb.set_trace()
     Glist = target_mesh.refine_loop( topo_lon, topo_lat , max_mb=max_mb);
     hits = Glist[-1].source_hits( topo_lon, topo_lat )
     print("  non-hit ratio: ",hits.size-hits.sum().astype(int)," / ",hits.size)
@@ -352,12 +361,15 @@ def main(argv):
     print('Opening',url)
     topo_data = xr.open_dataset(url)
     print('Finished opening',url)
-    pdb.set_trace()
+    #pdb.set_trace()
 
     # Read coordinates of topography
-    topo_lons = np.array( topo_data.variables[vx][:] )
-    topo_lats = np.array( topo_data.variables[vy][:] )
-    topo_elvs = np.array( topo_data.variables[ve][:,:] )
+    #topo_lons = np.array( topo_data.variables[vx][:] )
+    #topo_lats = np.array( topo_data.variables[vy][:] )
+    #topo_elvs = np.array( topo_data.variables[ve][:,:] )
+    topo_lons = topo_data[vx]
+    topo_lats = topo_data[vy]
+    topo_elvs = topo_data[ve]
 
     #Fix the topography to open some channels
     if(open_channels):
@@ -374,10 +386,16 @@ def main(argv):
         #Dardanells' constrict
         j1,i1=15616, 39166 #get_indices1D(topo_lons, topo_lats ,26.39, 40.14)
         topo_elvs[j1+1,i1]=topo_elvs[j1,i1]
+
     #Read a target grid
-    targ_grid =  netCDF4.Dataset(gridfilename)
-    targ_lon = np.array(targ_grid.variables['x'])
-    targ_lat = np.array(targ_grid.variables['y'])
+    #targ_grid =  netCDF4.Dataset(gridfilename)
+    targ_grid =  xr.open_dataset(gridfilename)
+
+    #targ_lon = np.array(targ_grid.variables['x'])
+    #targ_lat = np.array(targ_grid.variables['y'])
+    targ_lon = targ_grid['x']
+    targ_lat = targ_grid['y']
+
     #x and y have shape (nyp,nxp). Topog does not need the last col for global grids (period in x).
     targ_lon = targ_lon[:,:-1]
     targ_lat = targ_lat[:,:-1]
@@ -393,10 +411,11 @@ def main(argv):
         topo_elvs = np.roll(topo_elvs,-illc,axis=1) #Roll data depth to the right by the same amount.
 
     print(' topography grid array shapes: ' , topo_lons.shape,topo_lats.shape)
-    print(' topography longitude range:',topo_lons.min(),topo_lons.max())
-    print(' topography longitude range:',topo_lons[0],topo_lons[-1000])
-    print(' topography latitude range:',topo_lats.min(),topo_lats.max())
-    print(' Is mesh uniform?', GMesh.is_mesh_uniform( topo_lons, topo_lats ) )
+    print(' topography longitude range: %f %f' % (topo_lons.min(),topo_lons.max()))
+    print(' topography longitude range: %f %f' % (topo_lons[0],topo_lons[-1000]))
+    print(' topography latitude range:  %f %f' % (topo_lats.min(),topo_lats.max()))
+    #print(' Is mesh uniform?', GMesh.is_mesh_uniform( topo_lons, topo_lats ) )
+    print(' Is mesh uniform?', GMesh.is_mesh_uniform( topo_lons, topo_lats ).data.tolist() )
     ### Partition the Target grid into non-intersecting blocks
     #This works only if the target mesh is "regular"! Niki: Find the mathematical buzzword for "regular"!!
     #Is this a regular mesh?

@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import numpy as np
+import pdb
 
 def fourPointAve(x):
     xave = np.copy(x[::2,::2])
@@ -14,13 +15,17 @@ def is_mesh_uniform(lon,lat):
         delta = np.abs( array[1:] - array[:-1] ) # Difference along first axis
         error = np.abs( array )
         error = np.maximum( error[1:], error[:-1] ) # Error in difference
-        derror = np.abs( delta - delta.flatten()[0] ) # Tolerance to which comparison can be made
-        return np.all( derror < ( error + error.flatten()[0] ) )
+        #derror = np.abs( delta - delta.flatten()[0] ) # Tolerance to which comparison can be made
+        derror = np.abs( delta - delta.stack(z=(delta.coords)).reset_index('z')[0] )
+        #return np.all( derror < ( error + error.flatten()[0] ) )
+        return np.all( derror < ( error + error.stack(z=(error.coords)).reset_index('z')[0] ) )
     assert len(lon.shape) == len(lat.shape), "Arguments lon and lat must have the same rank"
     if len(lon.shape)==2: # 2D arralat
         assert lon.shape == lat.shape, "Arguments lon and lat must have the same shape"
     if len(lon.shape)>2 or len(lat.shape)>2:
-        raise Exception("Arguments must be either both be 1D or both be 2D arralat")
+        raise Exception("Arguments must be either both be 1D or both be 2D arrays")
+
+    #pdb.set_trace()
     return compare(lat) and compare(lon.T)
 
 class GMesh:
@@ -242,6 +247,9 @@ class GMesh:
         sni,snj =lon.shape[0],lat.shape[0] # Shape of source
         # Spacing on uniform mesh
         dellon, dellat = (lon[-1]-lon[0])/(sni-1), (lat[-1]-lat[0])/(snj-1)
+        # Convert to numbers
+        dellon = dellon.data.tolist()
+        dellat = dellat.data.tolist()
 #original
 #        assert self.lat.max()<=lat.max()+0.5*dellat, 'Mesh has latitudes above range of regular grid '+str(self.lat.max())+' '+str(lat.max()+0.5*dellat)
 #        assert self.lat.min()>=lat.min()-0.5*dellat, 'Mesh has latitudes below range of regular grid '+str(self.lat.min())+' '+str(lat.min()-0.5*dellat)
@@ -254,8 +262,11 @@ class GMesh:
             print("Detected repeated longitude ",lon[0],lon[-1])
             sni-=1 # Account for repeated longitude
         # Nearest integer (the upper one if equidistant)
-        nn_i = np.floor(np.mod(self.lon-lon[0]+0.5*dellon,360)/dellon)
-        nn_j = np.floor(0.5+(self.lat-lat[0])/dellat)
+        #pdb.set_trace()
+        #nn_i = np.floor(np.mod(self.lon-lon[0]+0.5*dellon,360)/dellon)
+        #nn_j = np.floor(0.5+(self.lat-lat[0])/dellat)
+        nn_i = np.floor(np.mod(self.lon-lon[0].data.tolist()+0.5*dellon,360)/dellon)
+        nn_j = np.floor(0.5+(self.lat-lat[0].data.tolist())/dellat)
         nn_i = np.minimum(nn_i, sni-1)
         nn_j = np.minimum(nn_j, snj-1)
         nn_i = np.maximum(nn_i, 0)
@@ -306,7 +317,11 @@ class GMesh:
         """Returns the array on target mesh with values equal to the nearest-neighbor source point data"""
         # Indexes of nearest xs,ys to each node on the mesh
         i,j = self.find_nn_uniform_source(xs,ys)
+        # These np.zeros need to have proper dimensions so they line up with
+        # input data: xs, ys and zs
+        # There is a lot of 2D > 1D and 1D > 2D operations to work through
         self.height = np.zeros(self.lon.shape)
+        pdb.set_trace()
         self.height[:,:] = zs[j[:],i[:]]
         self.h_std = np.zeros(self.lon.shape)
         self.h_min = np.zeros(self.lon.shape)
