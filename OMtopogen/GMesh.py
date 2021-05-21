@@ -288,7 +288,7 @@ class GMesh:
         hits[j,i] = 1
         return hits
 
-    def refine_loop(self, src_lon, src_lat, max_stages=32, max_mb=2000, verbose=True, singularity_radius=0.25):
+    def refine_loop(self, src_lon, src_lat, max_stages=32, max_mb=250, verbose=True, singularity_radius=0.25):
         """Repeatedly refines the mesh until all cells in the source grid are intercepted by mesh nodes.
            Returns a list of the refined meshes starting with parent mesh."""
         GMesh_list, this = [self], self
@@ -317,15 +317,13 @@ class GMesh:
         """Returns the array on target mesh with values equal to the nearest-neighbor source point data"""
         # Indexes of nearest xs,ys to each node on the mesh
         i,j = self.find_nn_uniform_source(xs,ys)
-        # These np.zeros need to have proper dimensions so they line up with
-        # input data: xs, ys and zs
-        # There is a lot of 2D > 1D and 1D > 2D operations to work through
         self.height = np.zeros(self.lon.shape)
-        pdb.set_trace()
-        self.height[:,:] = zs[j[:],i[:]]
+        #self.height[:,:] = zs[j[:],i[:]]
+        self.height[:,:] = zs.data[j[:],i[:]]
         self.h_std = np.zeros(self.lon.shape)
         self.h_min = np.zeros(self.lon.shape)
         self.h_max = np.zeros(self.lon.shape)
+
 	# Quantities needed for calculating the roughness
         self.xm = np.zeros(self.lon.shape)
         self.ym = np.zeros(self.lon.shape)
@@ -335,9 +333,13 @@ class GMesh:
         self.xym = np.zeros(self.lon.shape)
         self.xzm = np.zeros(self.lon.shape)
         self.yzm = np.zeros(self.lon.shape)
-        self.xm[:,:] = xs[i[:]]
-        self.ym[:,:] = ys[j[:]]
-        self.zm[:,:] = zs[j[:],i[:]]
+        #self.xm[:,:] = xs[i[:]]
+        self.xm[:,:] = xs.data[i[:]]
+        #self.ym[:,:] = ys[j[:]]
+        self.ym[:,:] = ys.data[j[:]]
+        # We just need a copy here
+        #self.zm[:,:] = zs[j[:],i[:]]
+        self.zm = self.height.copy()
         self.xxm[:,:] = self.xm[:,:] * self.xm[:,:]
         self.yym[:,:] = self.ym[:,:] * self.ym[:,:]
         self.xym[:,:] = self.xm[:,:] * self.ym[:,:]

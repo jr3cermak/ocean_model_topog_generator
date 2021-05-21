@@ -47,45 +47,79 @@ def write_topog(h,hstd,hmin,hmax,xx,yy,fnam=None,format='NETCDF3_CLASSIC',descri
 
     if fnam is None:
       fnam='topog.nc'
-    fout=nc.Dataset(fnam,'w',format=format)
+
+    #fout=nc.Dataset(fnam,'w',format=format)
+    fout = xr.Dataset()
 
     ny=h.shape[0]; nx=h.shape[1]
     print ('Writing netcdf file ',fnam,' with ny,nx= ',ny,nx)
+    #pdb.set_trace()
 
-    ny=fout.createDimension('ny',ny)
-    nx=fout.createDimension('nx',nx)
-    string=fout.createDimension('string',255)
-    tile=fout.createVariable('tile','S1',('string'))
-    height=fout.createVariable('height','f8',('ny','nx'))
-    height.units='meters'
-    height[:]=h
-    wet=fout.createVariable('wet','f8',('ny','nx'))
-    wet.units='none'
-    wet[:]=np.where(h<0.,1.0,0.0)
+    # Promote numpy to xarray
 
-    h_std=fout.createVariable('h_std','f8',('ny','nx'))
-    h_std.units='meters'
-    h_std[:]=hstd
-    h_min=fout.createVariable('h_min','f8',('ny','nx'))
-    h_min.units='meters'
-    h_min[:]=hmin
-    h_max=fout.createVariable('h_max','f8',('ny','nx'))
-    h_max.units='meters'
-    h_max[:]=hmax
-    x=fout.createVariable('x','f8',('ny','nx'))
-    x.units='meters'
-    x[:]=xx
-    y=fout.createVariable('y','f8',('ny','nx'))
-    y.units='meters'
-    y[:]=yy
+    #ny=fout.createDimension('ny',ny)
+    #nx=fout.createDimension('nx',nx)
+    # These are automatically added
+    
+    #string=fout.createDimension('string',255)
+    #tile=fout.createVariable('tile','S1',('string'))
+    # Default string type is U1, we can change this to S1 on write with encoding.
+    fout['tile'] = ''
+
+    #height=fout.createVariable('height','f8',('ny','nx'))
+    #height.units='meters'
+    #height[:]=h
+    fout['height'] = (('ny','nx'), h)
+    fout['height'].attrs['units'] = 'meters'
+
+    #wet=fout.createVariable('wet','f8',('ny','nx'))
+    #wet.units='none'
+    #wet[:]=np.where(h<0.,1.0,0.0)
+    fout['wet'] = (('ny','nx'), np.where(h<0.,1.0,0.0))
+    fout['wet'].attrs['units'] = 'none'
+
+    #h_std=fout.createVariable('h_std','f8',('ny','nx'))
+    #h_std.units='meters'
+    #h_std[:]=hstd
+    fout['h_std'] = (('ny','nx'), hstd)
+    fout['h_std'].attrs['units'] = 'meters'
+
+    #h_min=fout.createVariable('h_min','f8',('ny','nx'))
+    #h_min.units='meters'
+    #h_min[:]=hmin
+    fout['h_min'] = (('ny','nx'), hmin)
+    fout['h_min'].attrs['units'] = 'meters'
+
+    #h_max=fout.createVariable('h_max','f8',('ny','nx'))
+    #h_max.units='meters'
+    #h_max[:]=hmax
+    fout['h_max'] = (('ny','nx'), hmax)
+    fout['h_max'].attrs['units'] = 'meters'
+
+    #x=fout.createVariable('x','f8',('ny','nx'))
+    #x.units='meters'
+    #x[:]=xx
+    fout['x'] = (('ny','nx'), xx)
+    fout['x'].attrs['units'] = 'meters'
+
+    #y=fout.createVariable('y','f8',('ny','nx'))
+    #y.units='meters'
+    #y[:]=yy
+    fout['y'] = (('ny','nx'), yy)
+    fout['y'].attrs['units'] = 'meters'
+
     #global attributes
     if(not no_changing_meta):
-    	fout.history = history
-    	fout.description = description
-    	fout.source =  source
+    	#fout.history = history
+        fout.attrs['history'] = history
+    	#fout.description = description
+        fout.attrs['description'] = description
+    	#fout.source =  source
+        fout.attrs['source'] = source
 
-    fout.sync()
-    fout.close()
+    #fout.sync()
+    #fout.close()
+    fout.to_netcdf(fnam)
 
 def get_indices1D_old(lon_grid,lat_grid,x,y):
     """This function returns the j,i indices for the grid point closest to the input lon,lat coordinates."""
@@ -176,8 +210,8 @@ def extend_by_zeros(x,shape):
     return ext
 
 #def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs, max_mb=8000):
-# Reduce footprint to 4 GB
-def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs, max_mb=4000):
+# Reduce footprint to 250 MB for debugging
+def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs, max_mb=250):
     print("  Doing block number ",part)
     print("  Target sub mesh shape: ",lon.shape)
 
