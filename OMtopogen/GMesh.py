@@ -71,9 +71,11 @@ class GMesh:
             else: raise Exception('lon must be 1D or 2D.')
             if len(lat.shape)==1 or len(lat.shape)==2: nj = lat.shape[0]-1
             else: raise Exception('lat must be 1D or 2D.')
-        if from_cell_center: # Replace cell center coordinates with node coordinates
+        if from_cell_center: # Replace cell center coordinates with cell corner coordinates
+            # NOTE: Does not work with 2D lat/lon fields
             ni,nj = ni+1, nj+1
             tmp = np.zeros(ni+1)
+            pdb.set_trace()
             tmp[1:-1] = 0.5 * ( lon[:-1] + lon[1:] )
             tmp[0] = 1.5 * lon[0] - 0.5 * lon[1]
             tmp[-1] = 1.5 * lon[-1] - 0.5 * lon[-2]
@@ -115,6 +117,7 @@ class GMesh:
 
     def __repr__(self):
         return '<GMesh nj:%i ni:%i shape:(%i,%i)>'%(self.nj,self.ni,self.shape[0],self.shape[1])
+
     def __getitem__(self, key):
         return getattr(self, key)
 
@@ -282,13 +285,13 @@ class GMesh:
            on the mesh, 0 if no node falls in a cell"""
         # Indexes of nearest xs,ys to each node on the mesh
         i,j = self.find_nn_uniform_source(xs,ys)
-        sni,snj =xs.shape[0],ys.shape[0] # Shape of source
+        sni,snj = xs.shape[0],ys.shape[0] # Shape of source
         hits = np.zeros((snj,sni))
         if singularity_radius>0: hits[np.abs(ys)>90-singularity_radius] = 1
         hits[j,i] = 1
         return hits
 
-    def refine_loop(self, src_lon, src_lat, max_stages=32, max_mb=250, verbose=True, singularity_radius=0.25):
+    def refine_loop(self, src_lon, src_lat, max_stages=32, max_mb=500, verbose=True, singularity_radius=0.25):
         """Repeatedly refines the mesh until all cells in the source grid are intercepted by mesh nodes.
            Returns a list of the refined meshes starting with parent mesh."""
         GMesh_list, this = [self], self

@@ -14,7 +14,7 @@ except:
     else:
         raise ImportError("GMesh.py not found, either install package or run within directory")
 
-def break_array_to_blocks(a,xb=4,yb=1):
+def break_array_to_blocks(a, xb=4, yb=1):
     a_win = []
     if(xb == 4 and yb ==1):
         i1 = a.shape[1]//xb
@@ -29,14 +29,14 @@ def break_array_to_blocks(a,xb=4,yb=1):
         a_win.append(a[0:j1,i3:i4])
         return a_win
     else:
-        raise Exception('This rotuine can only make 2x2 blocks!')
+        raise Exception('This routine can only make 2x2 blocks!')
         ##Niki: Implement a better algo and lift this restriction
 
-def undo_break_array_to_blocks(a,xb=4,yb=1):
-    if(xb == 4 and yb ==1):
-        ao = np.append(a[0],a[1],axis=1)
-        ao = np.append(ao,a[2],axis=1)
-        ao = np.append(ao,a[3],axis=1)
+def undo_break_array_to_blocks(a, xb=4, yb=1):
+    if(xb == 4 and yb == 1):
+        ao = np.append(a[0], a[1], axis=1)
+        ao = np.append(ao  , a[2], axis=1)
+        ao = np.append(ao  , a[3], axis=1)
         return ao
     else:
         raise Exception('This routine can only make 2x2 blocks!')
@@ -64,7 +64,7 @@ def write_topog(h,hstd,hmin,hmax,xx,yy,fnam=None,format='NETCDF3_CLASSIC',descri
     #string=fout.createDimension('string',255)
     #tile=fout.createVariable('tile','S1',('string'))
     # Default string type is U1, we can change this to S1 on write with encoding.
-    fout['tile'] = ''
+    fout['tile'] = xr.DataArray(np.array([''],dtype="S1"),dims=['string'])
 
     #height=fout.createVariable('height','f8',('ny','nx'))
     #height.units='meters'
@@ -119,7 +119,13 @@ def write_topog(h,hstd,hmin,hmax,xx,yy,fnam=None,format='NETCDF3_CLASSIC',descri
 
     #fout.sync()
     #fout.close()
-    fout.to_netcdf(fnam)
+
+    # Clean up netCDF output
+    ncEncoding = {}
+    ncVars = list(fout.variables)
+    for ncVar in ncVars:
+        ncEncoding[ncVar] = {'_FillValue': None}
+    fout.to_netcdf(fnam, encoding=ncEncoding)
 
 def get_indices1D_old(lon_grid,lat_grid,x,y):
     """This function returns the j,i indices for the grid point closest to the input lon,lat coordinates."""
@@ -209,18 +215,22 @@ def extend_by_zeros(x,shape):
     ext[:x.shape[0],:x.shape[1]] = x
     return ext
 
-#def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs, max_mb=8000):
-# Reduce footprint to 250 MB for debugging
-def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs, max_mb=250):
+def do_block(part, lon, lat, topo_lons, topo_lats, topo_elvs, max_mb=500):
     print("  Doing block number ",part)
     print("  Target sub mesh shape: ",lon.shape)
 
-    target_mesh = GMesh.GMesh( lon=lon, lat=lat )
+    #target_mesh = GMesh.GMesh( lon=lon, lat=lat )
+    target_mesh = GMesh.GMesh(lon=lon, lat=lat)
+    #target_mesh.shape = lon.shape
+    #target_mesh.ni = target_mesh.shape[0]
+    #target_mesh.nj = target_mesh.shape[1]
+    print("  D:target_mesh.shape", target_mesh.shape)
+    #pdb.set_trace()
 
     #plot()
 
     # Indices in topographic data
-    ti,tj = target_mesh.find_nn_uniform_source( topo_lons, topo_lats )
+    ti,tj = target_mesh.find_nn_uniform_source(topo_lons, topo_lats)
 
     #Sample every other source points
     ##Niki: This is only for efficeincy and we want to remove the constraint for the final product.
@@ -251,68 +261,73 @@ def do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs, max_mb=250):
     # Refine grid by 2 till all source points are hit
     print("  Refining the target to hit all source points ...")
     #pdb.set_trace()
-    Glist = target_mesh.refine_loop( topo_lon, topo_lat , max_mb=max_mb);
-    hits = Glist[-1].source_hits( topo_lon, topo_lat )
+    Glist = target_mesh.refine_loop(topo_lon, topo_lat, max_mb=max_mb);
+    hits = Glist[-1].source_hits(topo_lon, topo_lat)
     print("  non-hit ratio: ",hits.size-hits.sum().astype(int)," / ",hits.size)
 
     # Sample the topography on the refined grid
     print("  Sampling the source points on target mesh ...")
-    Glist[-1].sample_source_data_on_target_mesh(topo_lon,topo_lat,topo_elv)
-    print("  Sampling finished...")
+    Glist[-1].sample_source_data_on_target_mesh(topo_lon, topo_lat, topo_elv)
+    print("  Sampling finished ...")
 
     # Coarsen back to the original taget grid
-    print("  Coarsening back to the original taget grid ...")
+    print("  Coarsening back to the original target grid ...")
     for i in reversed(range(1,len(Glist))):   # 1, makes it stop at element 1 rather than 0
         Glist[i].coarsenby2(Glist[i-1])
 
-    print("Roughness calculation via plane fit")
+    #pdb.set_trace()
+
+    print("  Roughness calculation via plane fit")
     #Roughness calculation by plane fitting
     #Calculate the slopes of the planes on the coarsest (model) grid cells
-    G=Glist[0]
-    denom=(G.xxm-G.xm*G.xm)*(G.yym-G.ym*G.ym)-(G.xym-G.xm*G.ym)*(G.xym-G.xm*G.ym)
-    alphd=(G.xzm-G.xm*G.zm)*(G.yym-G.ym*G.ym)-(G.yzm-G.ym*G.zm)*(G.xym-G.xm*G.ym)
-    betad=(G.yzm-G.ym*G.zm)*(G.xxm-G.xm*G.xm)-(G.xzm-G.xm*G.zm)*(G.xym-G.xm*G.ym)
+    G = Glist[0]
+    denom = (G.xxm-G.xm*G.xm)*(G.yym-G.ym*G.ym)-(G.xym-G.xm*G.ym)*(G.xym-G.xm*G.ym)
+    alphd = (G.xzm-G.xm*G.zm)*(G.yym-G.ym*G.ym)-(G.yzm-G.ym*G.zm)*(G.xym-G.xm*G.ym)
+    betad = (G.yzm-G.ym*G.zm)*(G.xxm-G.xm*G.xm)-(G.xzm-G.xm*G.zm)*(G.xym-G.xm*G.ym)
     #alph = alphd/denom
     #beta = betad/denom
 
-    rf=2**(len(Glist)-1) #refinement factor
+    rf = 2**(len(Glist)-1) #refinement factor
     #Generate the refined arrays from coarse arrays by repeating the coarse elements rf times
     #These arrays have the same values on finest mesh points inside each coarse cell by construction.
     #They are being used to calculate the (least-square) distance of data points
     #inside that cell from the fitted plane in that cell.
-    xmrf=refine_by_repeat(G.xm,rf)
-    ymrf=refine_by_repeat(G.ym,rf)
-    zmrf=refine_by_repeat(G.zm,rf)
-    alphdrf=refine_by_repeat(alphd,rf)
-    betadrf=refine_by_repeat(betad,rf)
-    denomrf=refine_by_repeat(denom,rf)
+    xmrf = refine_by_repeat(G.xm, rf)
+    ymrf = refine_by_repeat(G.ym, rf)
+    zmrf = refine_by_repeat(G.zm, rf)
+    alphdrf = refine_by_repeat(alphd, rf)
+    betadrf = refine_by_repeat(betad, rf)
+    denomrf = refine_by_repeat(denom, rf)
     #The refined mesh has a shape of (2*nj-1,2*ni-1) rather than (2*nj,2*ni) and hence
     #is missing the last row/column by construction!
     #So, the finest mesh does not have (rf*nj,rf*ni) points but is smaller by ...
     #Bring it to the same shape as (rf*nj,rf*ni) by padding with zeros.
     #This is for algorithm convenience and we remove the contribution of them later.
-    xs=extend_by_zeros(Glist[-1].xm,zmrf.shape)
-    ys=extend_by_zeros(Glist[-1].ym,zmrf.shape)
-    zs=extend_by_zeros(Glist[-1].zm,zmrf.shape)
+    xs = extend_by_zeros(Glist[-1].xm, zmrf.shape)
+    ys = extend_by_zeros(Glist[-1].ym, zmrf.shape)
+    zs = extend_by_zeros(Glist[-1].zm, zmrf.shape)
     #Calculate the vertical distance D of each source point from the least-square plane
     #Note that the least-square plane passes through the mean data point.
     #The last rf rows and columns are for padding and denom is not zero on them.
     #To avoid division by zero calculate denom*D instead
-    D_times_denom=denomrf*(zs-zmrf) - alphdrf*(xs-xmrf) - betadrf*(ys-ymrf)
+    D_times_denom = denomrf*(zs-zmrf) - alphdrf*(xs-xmrf) - betadrf*(ys-ymrf)
     #Calculate topography roughness as the standard deviation of D on each coarse (model) grid cell
     #This is why we wanted to have a (nj*rf,ni*rf) shape arrays and padded with zeros above.
-    D_times_denom_coarse=np.reshape(D_times_denom,(G.xm.shape[0],rf,G.xm.shape[1],rf))
+    D_times_denom_coarse = np.reshape(D_times_denom,(G.xm.shape[0],rf,G.xm.shape[1],rf))
     D_times_denom_coarse_std = D_times_denom_coarse.std(axis=(1,3))
-    D_std=np.zeros(G.zm.shape)
-    epsilon=1.0e-20 #To avoid negative underflow
+    D_std = np.zeros(G.zm.shape)
+    epsilon = 1.0e-20 #To avoid negative underflow
     D_std[:,:] = D_times_denom_coarse_std[:,:]/(denom[:,:]+epsilon)
+    # Don't forget to chop off the zeros added before
+    #D_std = D_std[:-1,:-1]
+    #pdb.set_trace()
 
     print("")
     #print("Writing ...")
     #filename = 'topog_refsamp_BP.nc'+str(b)
     #write_topog(Glist[0].height,fnam=filename,no_changing_meta=True)
     #print("heights shape:", lons[b].shape,Hlist[b].shape)
-    return Glist[0].height,D_std,Glist[0].h_min,Glist[0].h_max, hits
+    return Glist[0].height, D_std, Glist[0].h_min, Glist[0].h_max, hits
 
 
 def usage(scriptbasename):
@@ -328,14 +343,18 @@ def main(argv):
     scriptdirname = subprocess.check_output("dirname "+ scriptpath,shell=True).decode('ascii').rstrip("\n")
 
     plotem = False
+    plotFilename = "bathy.png"
     open_channels = False
+    useSupergrid = False
+    useClipping = False
     no_changing_meta = False
+    max_mb = 2000
     # URL of topographic data, names of longitude, latitude and elevation variables
     url,vx,vy,ve = '/work/Niki.Zadeh/datasets/topography/GEBCO_2014_2D.nc','lon','lat','elevation'
     # url,vx,vy,ve = 'http://thredds.socib.es/thredds/dodsC/ancillary_data/bathymetry/MED_GEBCO_30sec.nc','lon','lat','elevation'
     # url,vx,vy,ve = 'http://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NGDC/.ETOPO1/.z_bedrock/dods','lon','lat','z_bedrock'
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"hi:o:",["hgridfilename=","outputfilename=","no_changing_meta","open_channels","source_file=","source_lon=","source_lat=","source_elv=","plot"])
+        opts, args = getopt.getopt(sys.argv[1:],"hi:o:",["hgridfilename=","outputfilename=","no_changing_meta","open_channels","source_file=","source_lon=","source_lat=","source_elv=","plot=","super","max_mb=","clip"])
     except getopt.GetoptError as err:
         print(err)
         usage(scriptbasename)
@@ -357,15 +376,21 @@ def main(argv):
             vy = arg
         elif opt in ("--source_elv"):
             ve = arg
+        elif opt in ("--super"):
+            useSupergrid = True
+        elif opt in ("--clip"):
+            useClipping = True
         elif opt in ("--plot"):
             plotem = True
+            plotFilename = arg
         elif opt in ("--no_changing_meta"):
             no_changing_meta = True
         elif opt in ("--open_channels"):
             open_channels = True
+        elif opt in ("--max_mb"):
+            max_mb = int(arg)
         else:
             assert False, "unhandled option"
-
 
     print("")
     print("Generating model topography for target grid ", gridfilename)
@@ -427,12 +452,23 @@ def main(argv):
 
     #targ_lon = np.array(targ_grid.variables['x'])
     #targ_lat = np.array(targ_grid.variables['y'])
+
+    # By default, this operates on the supergrid.  Change to operate on only the
+    # regular grid and add an option to generate a supergrid (--super).
     targ_lon = targ_grid['x']
     targ_lat = targ_grid['y']
+    if not(useSupergrid):
+        # Subset to MOM6 regular grid
+        print(" Subsetting to regular MOM6 grid")
+        targ_lon = targ_grid['x'][1::2,1::2]
+        targ_lat = targ_grid['y'][1::2,1::2]
 
-    #x and y have shape (nyp,nxp). Topog does not need the last col for global grids (period in x).
-    targ_lon = targ_lon[:,:-1]
-    targ_lat = targ_lat[:,:-1]
+    # x and y have shape (nyp,nxp). Topog does not need the last col for global grids (period in x).
+    # Useful for GLOBAL GRIDS!
+    if useClipping:
+        targ_lon = targ_lon[:,:-1]
+        targ_lat = targ_lat[:,:-1]
+
     print(" Target mesh shape: ",targ_lon.shape)
     #Translate topo data to start at target_mesh.lon_m[0]
     #Why/When?
@@ -454,12 +490,13 @@ def main(argv):
     #This works only if the target mesh is "regular"! Niki: Find the mathematical buzzword for "regular"!!
     #Is this a regular mesh?
     # if( .NOT. is_mesh_regular() ) throw
+    print(' RAM allocation to refinements (Mb): %f' % (max_mb))
 
     #Niki: Why 4,1 partition?
-    xb=4
-    yb=1
-    lons=break_array_to_blocks(targ_lon,xb,yb)
-    lats=break_array_to_blocks(targ_lat,xb,yb)
+    xb = 4
+    yb = 1
+    lons = break_array_to_blocks(targ_lon, xb, yb)
+    lats = break_array_to_blocks(targ_lat, xb, yb)
 
     #We must loop over the 4 partitions
     Hlist=[]
@@ -469,7 +506,7 @@ def main(argv):
     for part in range(0,xb):
         lon = lons[part]
         lat = lats[part]
-        h,hstd,hmin,hmax,hits = do_block(part,lon,lat,topo_lons,topo_lats,topo_elvs)
+        h,hstd,hmin,hmax,hits = do_block(part, lon, lat, topo_lons, topo_lats, topo_elvs, max_mb=max_mb)
         Hlist.append(h)
         Hstdlist.append(hstd)
         Hminlist.append(hmin)
@@ -500,15 +537,22 @@ def main(argv):
         ax.stock_img()
         ax.coastlines()
         ax.gridlines()
-        im = ax.pcolormesh(targ_lon,targ_lat,height_refsamp, transform=cartopy.crs.PlateCarree())
+        im = ax.pcolormesh(targ_lon, targ_lat, height_refsamp, transform=cartopy.crs.PlateCarree())
         plt.colorbar(im,ax=ax);
-        #pdb.set_trace()
-        plt.savefig('bathyPlot.png')
+        plt.savefig("out/h_" + plotFilename)
+
+        plt.figure(figsize=(10,10))
+        ax = plt.subplot(111, projection=cartopy.crs.NearsidePerspective(central_latitude=90))
+        ax.set_global()
+        ax.stock_img()
+        ax.coastlines()
+        ax.gridlines()
+        im = ax.pcolormesh(targ_lon, targ_lat, hstd_refsamp, transform=cartopy.crs.PlateCarree())
+        plt.colorbar(im,ax=ax);
+        plt.savefig("out/r_" + plotFilename)
 
 if __name__ == "__main__":
     main(sys.argv[1:])
-
-
 
 #B ny,nx=  118 720 , st ny,nx=  119 721
 #M ny,nx=  350 720 , st ny,nx=  351 721
