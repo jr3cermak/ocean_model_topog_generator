@@ -75,7 +75,6 @@ class GMesh:
             # NOTE: Does not work with 2D lat/lon fields
             ni,nj = ni+1, nj+1
             tmp = np.zeros(ni+1)
-            pdb.set_trace()
             tmp[1:-1] = 0.5 * ( lon[:-1] + lon[1:] )
             tmp[0] = 1.5 * lon[0] - 0.5 * lon[1]
             tmp[-1] = 1.5 * lon[-1] - 0.5 * lon[-2]

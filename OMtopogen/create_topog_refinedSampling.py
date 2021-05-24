@@ -14,35 +14,67 @@ except:
     else:
         raise ImportError("GMesh.py not found, either install package or run within directory")
 
-def break_array_to_blocks(a, xb=4, yb=1):
+def break_array_to_blocks(a, xb=4, yb=1, useSupergrid=False):
     a_win = []
-    if(xb == 4 and yb ==1):
+    # TODO: xb==8 or other values are not completely supported
+    if ((xb == 4 or xb == 8) and yb == 1):
         i1 = a.shape[1]//xb
         i2 = 2*i1
         i3 = 3*i1
         i4 = a.shape[1]
 
         j1 = a.shape[0]//yb
-        a_win.append(a[0:j1,0:i1])
-        a_win.append(a[0:j1,i1:i2])
-        a_win.append(a[0:j1,i2:i3])
-        a_win.append(a[0:j1,i3:i4])
+
+        # If we are not using the super grid, we want to overlap
+        # the blocks to get rid of a zero band between the blocks
+        if not(useSupergrid):
+            print(" Extending blocks...")
+            a_win.append(a[0:j1,0:i1+1])
+            a_win.append(a[0:j1,i1:i2+1])
+            a_win.append(a[0:j1,i2:i3+1])
+            a_win.append(a[0:j1,i3:i4])
+        else:
+            a_win.append(a[0:j1,0:i1])
+            a_win.append(a[0:j1,i1:i2])
+            a_win.append(a[0:j1,i2:i3])
+            a_win.append(a[0:j1,i3:i4])
+
         return a_win
     else:
         raise Exception('This routine can only make 2x2 blocks!')
         ##Niki: Implement a better algo and lift this restriction
 
-def undo_break_array_to_blocks(a, xb=4, yb=1):
-    if(xb == 4 and yb == 1):
+def undo_break_array_to_blocks(a, xb=4, yb=1, useSupergrid=False):
+    if (xb == 4 and yb == 1):
+        if not(useSupergrid):
+            ao = np.append(a[0][:,:-1], a[1], axis=1)
+            ao = np.append(ao[:,:-1]  , a[2], axis=1)
+            ao = np.append(ao[:,:-1]  , a[3], axis=1)
+            # Trim y+1,x and y,x+1
+            ao = ao[:-1,:-1]
+            #pdb.set_trace()
+        else:
+            ao = np.append(a[0], a[1], axis=1)
+            ao = np.append(ao  , a[2], axis=1)
+            ao = np.append(ao  , a[3], axis=1)
+        return ao
+    elif (xb == 8 and yb == 1):
         ao = np.append(a[0], a[1], axis=1)
         ao = np.append(ao  , a[2], axis=1)
         ao = np.append(ao  , a[3], axis=1)
+        ao = np.append(ao  , a[4], axis=1)
+        ao = np.append(ao  , a[5], axis=1)
+        ao = np.append(ao  , a[6], axis=1)
+        ao = np.append(ao  , a[7], axis=1)
         return ao
     else:
         raise Exception('This routine can only make 2x2 blocks!')
         ##TODO: Implement a better algorithm and lift this restriction
 
-def write_topog(h,hstd,hmin,hmax,xx,yy,fnam=None,format='NETCDF3_CLASSIC',description=None,history=None,source=None,no_changing_meta=None):
+def write_topog(h, hstd, hmin, hmax, xx, yy, fnam=None, fdir=None,
+        format='NETCDF3_CLASSIC', description=None, history=None,
+        source=None, no_changing_meta=None):
+
     #import netCDF4 as nc
 
     if fnam is None:
@@ -63,8 +95,13 @@ def write_topog(h,hstd,hmin,hmax,xx,yy,fnam=None,format='NETCDF3_CLASSIC',descri
     
     #string=fout.createDimension('string',255)
     #tile=fout.createVariable('tile','S1',('string'))
-    # Default string type is U1, we can change this to S1 on write with encoding.
-    fout['tile'] = xr.DataArray(np.array([''],dtype="S1"),dims=['string'])
+    # Default string type is U1, we can change this to S<len> on write with encoding.
+    # The string length is len(stringVariable)+1 and passed to dtype of a numpy array.
+    # The encoding of the variable has to be 'str' and is done at the end with the
+    # removal of _FillValue defaults.
+    inString = ''
+    fout['tile'] = xr.DataArray(np.array([inString],
+        dtype="S%d" % (len(inString)+1)), dims=['string'])
 
     #height=fout.createVariable('height','f8',('ny','nx'))
     #height.units='meters'
@@ -121,11 +158,15 @@ def write_topog(h,hstd,hmin,hmax,xx,yy,fnam=None,format='NETCDF3_CLASSIC',descri
     #fout.close()
 
     # Clean up netCDF output
-    ncEncoding = {}
+    ncEncoding = {'tile': {'dtype': 'str'}}
     ncVars = list(fout.variables)
     for ncVar in ncVars:
         ncEncoding[ncVar] = {'_FillValue': None}
-    fout.to_netcdf(fnam, encoding=ncEncoding)
+
+    fpath = fnam
+    if fdir:
+        fpath = os.path.join(fdir, fnam)
+    fout.to_netcdf(fpath, encoding=ncEncoding)
 
 def get_indices1D_old(lon_grid,lat_grid,x,y):
     """This function returns the j,i indices for the grid point closest to the input lon,lat coordinates."""
@@ -348,13 +389,20 @@ def main(argv):
     useSupergrid = False
     useClipping = False
     no_changing_meta = False
+    prefixOutDirectory = None
     max_mb = 2000
     # URL of topographic data, names of longitude, latitude and elevation variables
     url,vx,vy,ve = '/work/Niki.Zadeh/datasets/topography/GEBCO_2014_2D.nc','lon','lat','elevation'
     # url,vx,vy,ve = 'http://thredds.socib.es/thredds/dodsC/ancillary_data/bathymetry/MED_GEBCO_30sec.nc','lon','lat','elevation'
     # url,vx,vy,ve = 'http://iridl.ldeo.columbia.edu/SOURCES/.NOAA/.NGDC/.ETOPO1/.z_bedrock/dods','lon','lat','z_bedrock'
     try:
-        opts, args = getopt.getopt(sys.argv[1:],"hi:o:",["hgridfilename=","outputfilename=","no_changing_meta","open_channels","source_file=","source_lon=","source_lat=","source_elv=","plot=","super","max_mb=","clip"])
+        opts, args = getopt.getopt(sys.argv[1:],"hi:o:",
+                ["hgridfilename=","outputfilename=","no_changing_meta",
+                    "open_channels","source_file=","source_lon=",
+                    "source_lat=","source_elv=","plot=","super",
+                    "max_mb=","clip",
+                    "output_dir="
+                    ])
     except getopt.GetoptError as err:
         print(err)
         usage(scriptbasename)
@@ -383,6 +431,8 @@ def main(argv):
         elif opt in ("--plot"):
             plotem = True
             plotFilename = arg
+        elif opt in ("--output_dir="):
+            prefixOutDirectory = arg
         elif opt in ("--no_changing_meta"):
             no_changing_meta = True
         elif opt in ("--open_channels"):
@@ -459,9 +509,11 @@ def main(argv):
     targ_lat = targ_grid['y']
     if not(useSupergrid):
         # Subset to MOM6 regular grid
-        print(" Subsetting to regular MOM6 grid")
-        targ_lon = targ_grid['x'][1::2,1::2]
-        targ_lat = targ_grid['y'][1::2,1::2]
+        print(" Collecting verticies from MOM6 grid.")
+        grid_lon = targ_grid['x'][1::2,1::2]
+        grid_lat = targ_grid['y'][1::2,1::2]
+        targ_lon = targ_grid['x'][::2,::2]
+        targ_lat = targ_grid['y'][::2,::2]
 
     # x and y have shape (nyp,nxp). Topog does not need the last col for global grids (period in x).
     # Useful for GLOBAL GRIDS!
@@ -495,8 +547,9 @@ def main(argv):
     #Niki: Why 4,1 partition?
     xb = 4
     yb = 1
-    lons = break_array_to_blocks(targ_lon, xb, yb)
-    lats = break_array_to_blocks(targ_lat, xb, yb)
+    lons = break_array_to_blocks(targ_lon, xb, yb, useSupergrid=useSupergrid)
+    lats = break_array_to_blocks(targ_lat, xb, yb, useSupergrid=useSupergrid)
+    #pdb.set_trace()
 
     #We must loop over the 4 partitions
     Hlist=[]
@@ -513,19 +566,31 @@ def main(argv):
         Hmaxlist.append(hmax)
 
     print(" Merging the blocks ...")
-    height_refsamp = undo_break_array_to_blocks(Hlist,xb,yb)
-    hstd_refsamp = undo_break_array_to_blocks(Hstdlist,xb,yb)
-    hmin_refsamp = undo_break_array_to_blocks(Hminlist,xb,yb)
-    hmax_refsamp = undo_break_array_to_blocks(Hmaxlist,xb,yb)
-    write_topog(height_refsamp,hstd_refsamp,hmin_refsamp,hmax_refsamp,targ_lon,targ_lat,fnam=outputfilename,description=desc,history=hist,source=source,no_changing_meta=no_changing_meta)
+    height_refsamp = undo_break_array_to_blocks(Hlist, xb, yb, useSupergrid=useSupergrid)
+    hstd_refsamp = undo_break_array_to_blocks(Hstdlist, xb, yb, useSupergrid=useSupergrid)
+    hmin_refsamp = undo_break_array_to_blocks(Hminlist, xb, yb, useSupergrid=useSupergrid)
+    hmax_refsamp = undo_break_array_to_blocks(Hmaxlist, xb, yb, useSupergrid=useSupergrid)
+    #pdb.set_trace()
+    if not(useSupergrid):
+        write_topog(height_refsamp, hstd_refsamp, hmin_refsamp,
+                hmax_refsamp, grid_lon, grid_lat,
+                fnam=outputfilename, fdir=prefixOutDirectory,
+                description=desc, history=hist, source=source,
+                no_changing_meta=no_changing_meta)
+    else:
+        write_topog(height_refsamp, hstd_refsamp, hmin_refsamp,
+                hmax_refsamp, targ_lon, targ_lat,
+                fnam=outputfilename, fdir=prefixOutDirectory,
+                description=desc, history=hist, source=source,
+                no_changing_meta=no_changing_meta)
 
     #Niki: Why isn't h periodic in x?  I.e., height_refsamp[:,0] != height_refsamp[:,-1]
     print(" Periodicity test  : ", height_refsamp[0,0] , height_refsamp[0,-1])
     print(" Periodicity break : ", (np.abs(height_refsamp[:,0]- height_refsamp[:,-1])).max() )
     toc = time.perf_counter()
-    print(f"It took {toc - tic:0.4f} seconds on platform ",host)
+    print(f"It took {toc - tic:0.4f} seconds on platform", host)
 
-    if(plotem):
+    if (plotem):
         import matplotlib.pyplot as plt
         import pylab as pl
         from IPython import display
@@ -539,7 +604,10 @@ def main(argv):
         ax.gridlines()
         im = ax.pcolormesh(targ_lon, targ_lat, height_refsamp, transform=cartopy.crs.PlateCarree())
         plt.colorbar(im,ax=ax);
-        plt.savefig("out/h_" + plotFilename)
+        fpath = "h_" + plotFilename
+        if prefixOutDirectory:
+            fpath = os.path.join(prefixOutDirectory, fpath)
+        plt.savefig(fpath)
 
         plt.figure(figsize=(10,10))
         ax = plt.subplot(111, projection=cartopy.crs.NearsidePerspective(central_latitude=90))
@@ -549,7 +617,10 @@ def main(argv):
         ax.gridlines()
         im = ax.pcolormesh(targ_lon, targ_lat, hstd_refsamp, transform=cartopy.crs.PlateCarree())
         plt.colorbar(im,ax=ax);
-        plt.savefig("out/r_" + plotFilename)
+        fpath = "r_" + plotFilename
+        if prefixOutDirectory:
+            fpath = os.path.join(prefixOutDirectory, fpath)
+        plt.savefig(fpath)
 
 if __name__ == "__main__":
     main(sys.argv[1:])
