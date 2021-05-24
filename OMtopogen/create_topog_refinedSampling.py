@@ -5,6 +5,7 @@ import datetime, os, subprocess
 #import netCDF4
 import xarray as xr
 import numpy as np
+import hashlib
 import pdb
 try:
     from OMtopogen import GMesh
@@ -84,7 +85,7 @@ def write_topog(h, hstd, hmin, hmax, xx, yy, fnam=None, fdir=None,
     fout = xr.Dataset()
 
     ny=h.shape[0]; nx=h.shape[1]
-    print ('Writing netcdf file ',fnam,' with ny,nx= ',ny,nx)
+    print ('Writing netcdf file ', fnam, ' with ny,nx= ', ny, nx)
     #pdb.set_trace()
 
     # Promote numpy to xarray
@@ -108,42 +109,49 @@ def write_topog(h, hstd, hmin, hmax, xx, yy, fnam=None, fdir=None,
     #height[:]=h
     fout['height'] = (('ny','nx'), h)
     fout['height'].attrs['units'] = 'meters'
+    fout['height'].attrs['sha256'] = hashlib.sha256( np.array( h ) ).hexdigest()
 
     #wet=fout.createVariable('wet','f8',('ny','nx'))
     #wet.units='none'
     #wet[:]=np.where(h<0.,1.0,0.0)
     fout['wet'] = (('ny','nx'), np.where(h<0.,1.0,0.0))
     fout['wet'].attrs['units'] = 'none'
+    fout['wet'].attrs['sha256'] = hashlib.sha256( np.array( fout['wet'] ) ).hexdigest()
 
     #h_std=fout.createVariable('h_std','f8',('ny','nx'))
     #h_std.units='meters'
     #h_std[:]=hstd
     fout['h_std'] = (('ny','nx'), hstd)
     fout['h_std'].attrs['units'] = 'meters'
+    fout['h_std'].attrs['sha256'] = hashlib.sha256( np.array( hstd ) ).hexdigest()
 
     #h_min=fout.createVariable('h_min','f8',('ny','nx'))
     #h_min.units='meters'
     #h_min[:]=hmin
     fout['h_min'] = (('ny','nx'), hmin)
     fout['h_min'].attrs['units'] = 'meters'
+    fout['h_min'].attrs['sha256'] = hashlib.sha256( np.array( hmin ) ).hexdigest()
 
     #h_max=fout.createVariable('h_max','f8',('ny','nx'))
     #h_max.units='meters'
     #h_max[:]=hmax
     fout['h_max'] = (('ny','nx'), hmax)
     fout['h_max'].attrs['units'] = 'meters'
+    fout['h_max'].attrs['sha256'] = hashlib.sha256( np.array( hmax ) ).hexdigest()
 
     #x=fout.createVariable('x','f8',('ny','nx'))
     #x.units='meters'
     #x[:]=xx
     fout['x'] = (('ny','nx'), xx)
     fout['x'].attrs['units'] = 'meters'
+    fout['x'].attrs['sha256'] = hashlib.sha256( np.array( xx ) ).hexdigest()
 
     #y=fout.createVariable('y','f8',('ny','nx'))
     #y.units='meters'
     #y[:]=yy
     fout['y'] = (('ny','nx'), yy)
     fout['y'].attrs['units'] = 'meters'
+    fout['y'].attrs['sha256'] = hashlib.sha256( np.array( yy ) ).hexdigest()
 
     #global attributes
     if(not no_changing_meta):
@@ -158,17 +166,18 @@ def write_topog(h, hstd, hmin, hmax, xx, yy, fnam=None, fdir=None,
     #fout.close()
 
     # Clean up netCDF output
-    ncEncoding = {'tile': {'dtype': 'str'}}
     ncVars = list(fout.variables)
+    ncEncoding = {}
     for ncVar in ncVars:
         ncEncoding[ncVar] = {'_FillValue': None}
+    ncEncoding['tile'] = {'dtype': 'str'}
 
     fpath = fnam
     if fdir:
         fpath = os.path.join(fdir, fnam)
     fout.to_netcdf(fpath, encoding=ncEncoding)
 
-def get_indices1D_old(lon_grid,lat_grid,x,y):
+def get_indices1D_old(lon_grid, lat_grid, x, y):
     """This function returns the j,i indices for the grid point closest to the input lon,lat coordinates."""
     """It returns the j,i indices."""
     lons=np.fabs(lon_grid-x)
@@ -181,9 +190,9 @@ def get_indices1D_old(lon_grid,lat_grid,x,y):
 #    print("got:    ",lon_grid[i0] , lat_grid[j0])
 #    print(j0,i0)
     return j0,i0
-def mdist(x1,x2):
+def mdist(x1, x2):
     """Returns positive distance modulo 360."""
-    return np.minimum( np.mod(x1-x2,360.), np.mod(x2-x1,360.) )
+    return np.minimum(np.mod(x1-x2,360.), np.mod(x2-x1,360.) )
 def get_indices1D(lon_grid,lat_grid,x,y):
     """This function returns the j,i indices for the grid point closest to the input lon,lat coordinates."""
     """It returns the j,i indices."""
@@ -205,7 +214,7 @@ def get_indices1D(lon_grid,lat_grid,x,y):
     print(" j,i=",j0,i0)
     return j0,i0,good
 
-def get_indices2D(lon_grid,lat_grid,x,y):
+def get_indices2D(lon_grid, lat_grid, x, y):
     """This function returns the j,i indices for the grid point closest to the input lon,lat coordinates."""
     """It returns the j,i indices."""
     lons=np.fabs(lon_grid-x)
@@ -247,11 +256,11 @@ def plot():
     plt.pause(1)
     display.display(pl.gcf())
 
-def refine_by_repeat(x,rf):
+def refine_by_repeat(x, rf):
     xrf=np.repeat(np.repeat(x[:,:],rf,axis=0),rf,axis=1) #refine by repeating values
     return xrf
 
-def extend_by_zeros(x,shape):
+def extend_by_zeros(x, shape):
     ext=np.zeros(shape)
     ext[:x.shape[0],:x.shape[1]] = x
     return ext
@@ -467,9 +476,9 @@ def main(argv):
     # # Open and read the topographic dataset
     # Open a topography dataset, check that the topography is on a uniform grid.
     #topo_data = netCDF4.Dataset(url)
-    print('Opening',url)
+    print('Opening', url)
     topo_data = xr.open_dataset(url)
-    print('Finished opening',url)
+    print('Finished opening', url)
     #pdb.set_trace()
 
     # Read coordinates of topography
@@ -514,6 +523,7 @@ def main(argv):
         grid_lat = targ_grid['y'][1::2,1::2]
         targ_lon = targ_grid['x'][::2,::2]
         targ_lat = targ_grid['y'][::2,::2]
+    #pdb.set_trace()
 
     # x and y have shape (nyp,nxp). Topog does not need the last col for global grids (period in x).
     # Useful for GLOBAL GRIDS!

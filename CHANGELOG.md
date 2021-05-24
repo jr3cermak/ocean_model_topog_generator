@@ -16,6 +16,8 @@
   - TODO: Understand the roughness computation
   - TODO: Create the land mask file
   - Update .gitignore
+  - Add hashes to grid output
+  - Proper placement of encoding before writing netCDF file
 
 # 2021-05-21
 
