@@ -1,5 +1,8 @@
 # 2021-05-24
 
+ - From MOM6-examples/global; adopt former metadata from existing variables
+ - tile string has a default length of 255
+ - Compute h2 (which is hstd\*hstd) meters^2 and provide depth=-height.
  - It has been discovered that this repo follows a three stage process:
    - Step 1: Compute hstd, height and wet/dry on a supergrid.
    - Step 2: Fill ponds.

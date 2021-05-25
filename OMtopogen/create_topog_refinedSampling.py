@@ -96,20 +96,25 @@ def write_topog(h, hstd, hmin, hmax, xx, yy, fnam=None, fdir=None,
     
     #string=fout.createDimension('string',255)
     #tile=fout.createVariable('tile','S1',('string'))
-    # Default string type is U1, we can change this to S<len> on write with encoding.
-    # The string length is len(stringVariable)+1 and passed to dtype of a numpy array.
+    # Default string type is U1, we can change this to 'str' on write with encoding.
+    # A default string length of 255 is passed to dtype of a numpy array.
     # The encoding of the variable has to be 'str' and is done at the end with the
     # removal of _FillValue defaults.
-    inString = ''
-    fout['tile'] = xr.DataArray(np.array([inString],
-        dtype="S%d" % (len(inString)+1)), dims=['string'])
+    tileString = 'tile1'
+    fout['tile'] = xr.DataArray(np.array([tileString], dtype="S255", dims=['string'])
 
     #height=fout.createVariable('height','f8',('ny','nx'))
     #height.units='meters'
     #height[:]=h
     fout['height'] = (('ny','nx'), h)
     fout['height'].attrs['units'] = 'meters'
+    fout['height'].attrs['standard_name'] = 'topographic height at Arakawa C h-points'
     fout['height'].attrs['sha256'] = hashlib.sha256( np.array( h ) ).hexdigest()
+
+    fout['depth'] = (('ny','nx'), -h)
+    fout['depth'].attrs['units'] = 'meters'
+    fout['depth'].attrs['standard_name'] = 'topographic depth at Arakawa C h-points'
+    fout['depth'].attrs['sha256'] = hashlib.sha256( np.array( -h ) ).hexdigest()
 
     #wet=fout.createVariable('wet','f8',('ny','nx'))
     #wet.units='none'
@@ -123,13 +128,21 @@ def write_topog(h, hstd, hmin, hmax, xx, yy, fnam=None, fdir=None,
     #h_std[:]=hstd
     fout['h_std'] = (('ny','nx'), hstd)
     fout['h_std'].attrs['units'] = 'meters'
+    fout['h_std'].attrs['standard_name'] = 'Subgrid scale topography height standard deviation Arakawa C h-points'
     fout['h_std'].attrs['sha256'] = hashlib.sha256( np.array( hstd ) ).hexdigest()
+
+    # Compute h2
+    fout['h2'] = (('ny','nx'), hstd * hstd)
+    fout['h2'].attrs['units'] = 'meters^2'
+    fout['h2'].attrs['standard_name'] = 'Subgrid scale topography height variance at Arakawa C h-points'
+    fout['h2'].attrs['sha256'] = hashlib.sha256( np.array( hstd * hstd) ).hexdigest()
 
     #h_min=fout.createVariable('h_min','f8',('ny','nx'))
     #h_min.units='meters'
     #h_min[:]=hmin
     fout['h_min'] = (('ny','nx'), hmin)
     fout['h_min'].attrs['units'] = 'meters'
+    fout['h_min'].attrs['standard_name'] = 'Subgrid scale topography height standard deviation minimum at Arakawa C h-points'
     fout['h_min'].attrs['sha256'] = hashlib.sha256( np.array( hmin ) ).hexdigest()
 
     #h_max=fout.createVariable('h_max','f8',('ny','nx'))
@@ -137,20 +150,23 @@ def write_topog(h, hstd, hmin, hmax, xx, yy, fnam=None, fdir=None,
     #h_max[:]=hmax
     fout['h_max'] = (('ny','nx'), hmax)
     fout['h_max'].attrs['units'] = 'meters'
+    fout['h_man'].attrs['standard_name'] = 'Subgrid scale topography height standard deviation maximum at Arakawa C h-points'
     fout['h_max'].attrs['sha256'] = hashlib.sha256( np.array( hmax ) ).hexdigest()
 
     #x=fout.createVariable('x','f8',('ny','nx'))
     #x.units='meters'
     #x[:]=xx
     fout['x'] = (('ny','nx'), xx)
-    fout['x'].attrs['units'] = 'meters'
+    fout['x'].attrs['units'] = 'degrees_east'
+    fout['x'].attrs['standard_name'] = 'longitude'
     fout['x'].attrs['sha256'] = hashlib.sha256( np.array( xx ) ).hexdigest()
 
     #y=fout.createVariable('y','f8',('ny','nx'))
     #y.units='meters'
     #y[:]=yy
     fout['y'] = (('ny','nx'), yy)
-    fout['y'].attrs['units'] = 'meters'
+    fout['y'].attrs['units'] = 'degrees_north'
+    fout['y'].attrs['standard_name'] = 'latitude'
     fout['y'].attrs['sha256'] = hashlib.sha256( np.array( yy ) ).hexdigest()
 
     #global attributes
