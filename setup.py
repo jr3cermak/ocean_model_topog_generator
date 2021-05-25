@@ -1,5 +1,9 @@
 ''' setup for ocean_model_topog_generator '''
 import setuptools
+import os
+
+with open('requirements.txt') as f:
+    required = f.read().splitlines()
 
 setuptools.setup(
     name="OMtopogen",
@@ -13,5 +17,6 @@ setuptools.setup(
     packages=['OMtopogen'],
     scripts=['OMtopogen/create_topog_refinedSampling.py',
              'OMtopogen/ice9.py',
-             'OMtopogen/merge_topog_tiles.py']
+             'OMtopogen/merge_topog_tiles.py'],
+    install_requires=required
 )
