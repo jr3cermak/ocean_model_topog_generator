@@ -1,3 +1,14 @@
+# 2021-05-24
+
+ - It has been discovered that this repo follows a three stage process:
+   - Step 1: Compute hstd, height and wet/dry on a supergrid.
+   - Step 2: Fill ponds.
+   - Step 3: Provide depth and h2 reduced to a regular grid.
+ - Now we can refactor and add to the grid generation tools.
+   - Reimplement current hacks using --fix-by-overlap-qh-grid-shift
+ - Package dependencies:
+   - xarray netCDF4 numpy pandas matplotlib IPython cartopy pkdtree scipy
+
 # 2021-05-23
 
  - If we specify --super, the entire supergrid is passed for computation of H
