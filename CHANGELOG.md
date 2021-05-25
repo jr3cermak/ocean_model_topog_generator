@@ -1,3 +1,10 @@
+# 2021-05-25
+
+ - Add software requirements to requirements.txt and add reference inside
+   setup.py.
+ - The python library cartopy has a system library requirement of proj and
+   geos.
+
 # 2021-05-24
 
  - From MOM6-examples/global; adopt former metadata from existing variables

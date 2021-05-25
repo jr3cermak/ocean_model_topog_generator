@@ -9,6 +9,10 @@ Ocean Modelling (Elsevier), http://www.journals.elsevier.com/ocean-modelling/. I
 # License
 Distributed under the Gnu General Public License, version 3. See LICENSE.txt for details or http://www.gnu.org/licenses/gpl.html.
 
+# Requirements
+See requirements.txt for required python packages.  In particular, cartopy requires proj and geos system libraries to be
+installed prior to installing the python library.
+
 # Sample usage
 OMtopogen/create_topog_refinedSampling.py --hgridfilename PATH_TO/ocean_hgrid.ncSO.nc --outputfilename topog_SO_p25.nc --source_file PATH_TO/GEBCO_2020.nc --source_lon lon --source_lat lat --source_elv elevation
 
