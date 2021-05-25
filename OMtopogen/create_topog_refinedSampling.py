@@ -101,7 +101,7 @@ def write_topog(h, hstd, hmin, hmax, xx, yy, fnam=None, fdir=None,
     # The encoding of the variable has to be 'str' and is done at the end with the
     # removal of _FillValue defaults.
     tileString = 'tile1'
-    fout['tile'] = xr.DataArray(np.array([tileString], dtype="S255"), dims=['string'])
+    fout['tile'] = tileString
 
     #height=fout.createVariable('height','f8',('ny','nx'))
     #height.units='meters'
@@ -186,7 +186,7 @@ def write_topog(h, hstd, hmin, hmax, xx, yy, fnam=None, fdir=None,
     ncEncoding = {}
     for ncVar in ncVars:
         ncEncoding[ncVar] = {'_FillValue': None}
-    ncEncoding['tile'] = {'dtype': 'str'}
+    ncEncoding['tile'] = {'dtype': 'S255', 'char_dim_name': 'string'}
 
     fpath = fnam
     if fdir:
