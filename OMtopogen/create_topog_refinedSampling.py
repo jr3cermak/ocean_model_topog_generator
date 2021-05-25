@@ -101,7 +101,7 @@ def write_topog(h, hstd, hmin, hmax, xx, yy, fnam=None, fdir=None,
     # The encoding of the variable has to be 'str' and is done at the end with the
     # removal of _FillValue defaults.
     tileString = 'tile1'
-    fout['tile'] = xr.DataArray(np.array([tileString], dtype="S255", dims=['string'])
+    fout['tile'] = xr.DataArray(np.array([tileString], dtype="S255"), dims=['string'])
 
     #height=fout.createVariable('height','f8',('ny','nx'))
     #height.units='meters'
@@ -150,7 +150,7 @@ def write_topog(h, hstd, hmin, hmax, xx, yy, fnam=None, fdir=None,
     #h_max[:]=hmax
     fout['h_max'] = (('ny','nx'), hmax)
     fout['h_max'].attrs['units'] = 'meters'
-    fout['h_man'].attrs['standard_name'] = 'Subgrid scale topography height standard deviation maximum at Arakawa C h-points'
+    fout['h_max'].attrs['standard_name'] = 'Subgrid scale topography height standard deviation maximum at Arakawa C h-points'
     fout['h_max'].attrs['sha256'] = hashlib.sha256( np.array( hmax ) ).hexdigest()
 
     #x=fout.createVariable('x','f8',('ny','nx'))
