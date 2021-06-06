@@ -1,3 +1,10 @@
+# 2021-06-06
+
+ - Add ability to apply old land mask to new bathy when generating h2 field.
+ - Add ability to plot using an extent instead of a global view.
+ - Add a hook to run ice9 algorithm.
+ - Plots are now in landscape with horizontal colorbars.  Changed colormaps.
+
 # 2021-05-25
 
  - Add software requirements to requirements.txt and add reference inside

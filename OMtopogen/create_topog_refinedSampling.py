@@ -74,7 +74,7 @@ def undo_break_array_to_blocks(a, xb=4, yb=1, useSupergrid=False):
 
 def write_topog(h, hstd, hmin, hmax, xx, yy, fnam=None, fdir=None,
         format='NETCDF3_CLASSIC', description=None, history=None,
-        source=None, no_changing_meta=None):
+        source=None, no_changing_meta=None, auxData=None, auxOpts=None):
 
     #import netCDF4 as nc
 
@@ -119,7 +119,7 @@ def write_topog(h, hstd, hmin, hmax, xx, yy, fnam=None, fdir=None,
     #wet=fout.createVariable('wet','f8',('ny','nx'))
     #wet.units='none'
     #wet[:]=np.where(h<0.,1.0,0.0)
-    fout['wet'] = (('ny','nx'), np.where(h<0.,1.0,0.0))
+    fout['wet'] = (('ny','nx'), np.where(h<0.0, 1.0, 0.0))
     fout['wet'].attrs['units'] = 'none'
     fout['wet'].attrs['sha256'] = hashlib.sha256( np.array( fout['wet'] ) ).hexdigest()
 
@@ -168,6 +168,18 @@ def write_topog(h, hstd, hmin, hmax, xx, yy, fnam=None, fdir=None,
     fout['y'].attrs['units'] = 'degrees_north'
     fout['y'].attrs['standard_name'] = 'latitude'
     fout['y'].attrs['sha256'] = hashlib.sha256( np.array( yy ) ).hexdigest()
+
+    # Do additional stuff if options are set
+    if auxOpts:
+        if 'applyLandmask' in auxOpts.keys():
+            if auxOpts['applyLandmask']:
+                print("  Applying land mask to wet and depth.")
+                fout['land_mask'] = auxData['land_mask'].copy()
+                fout['land_mask'].attrs['sha256'] = hashlib.sha256( fout['land_mask'].data ).hexdigest()
+                fout['wet'] = xr.where(fout['land_mask'] == 0, 1.0, 0.0)
+                fout['wet'].attrs['sha256'] = hashlib.sha256( fout['wet'].data ).hexdigest()
+                fout['depth'] = xr.where(fout['wet'] == 1, fout['depth'], auxOpts['landmaskDepth'])
+                fout['depth'].attrs['sha256'] = hashlib.sha256( fout['depth'].data ).hexdigest()
 
     #global attributes
     if(not no_changing_meta):
@@ -221,9 +233,9 @@ def get_indices1D(lon_grid,lat_grid,x,y):
     i0=lonm[0][0]
     print(" wanted: %f %f" % (x,y))
     print(" got:    %f %f" % (lon_grid[i0] , lat_grid[j0]))
-    good=False
+    good = False
     if(abs(x-lon_grid[i0]) < abs(lon_grid[1]-lon_grid[0])):
-        good=True
+        good = True
         print("  good")
     else:
         print("  bad")
@@ -408,7 +420,9 @@ def main(argv):
     scriptbasename = subprocess.check_output("basename "+ scriptpath,shell=True).decode('ascii').rstrip("\n")
     scriptdirname = subprocess.check_output("dirname "+ scriptpath,shell=True).decode('ascii').rstrip("\n")
 
+    # Configurable options
     plotem = False
+    plotGlobal = False
     plotFilename = "bathy.png"
     open_channels = False
     useSupergrid = False
@@ -416,6 +430,13 @@ def main(argv):
     no_changing_meta = False
     prefixOutDirectory = None
     max_mb = 2000
+    landmaskFilename = None
+    # This is "depth".  Positive is depth, negative is height.
+    landmaskDepth = -9999.0
+    applyIce9 = False
+    setExtent = False
+    mapExtent = [0, 0, 0, 0]
+
     # URL of topographic data, names of longitude, latitude and elevation variables
     url,vx,vy,ve = '/work/Niki.Zadeh/datasets/topography/GEBCO_2014_2D.nc','lon','lat','elevation'
     # url,vx,vy,ve = 'http://thredds.socib.es/thredds/dodsC/ancillary_data/bathymetry/MED_GEBCO_30sec.nc','lon','lat','elevation'
@@ -424,9 +445,15 @@ def main(argv):
         opts, args = getopt.getopt(sys.argv[1:],"hi:o:",
                 ["hgridfilename=","outputfilename=","no_changing_meta",
                     "open_channels","source_file=","source_lon=",
-                    "source_lat=","source_elv=","plot=","super",
+                    "source_lat=","source_elv=",
+                    "plot_figures=","plot_global",
+                    "plot_extent=",
+                    "super",
                     "max_mb=","clip",
-                    "output_dir="
+                    "output_dir=",
+                    "land_mask_file=",
+                    "land_mask_depth=",
+                    "apply_ice9",
                     ])
     except getopt.GetoptError as err:
         print(err)
@@ -441,6 +468,11 @@ def main(argv):
             gridfilename = arg
         elif opt in ("-o", "--outputfilename"):
             outputfilename = arg
+        elif opt in ("--plot_extent"):
+            extData = arg.split(',')
+            setExtent = True
+            # [minLon, maxLon, minLat, maxLat]
+            mapExtent = [float(extData[0]), float(extData[1]), float(extData[2]), float(extData[3])]
         elif opt in ("--source_file"):
             url = arg
         elif opt in ("--source_lon"):
@@ -453,15 +485,23 @@ def main(argv):
             useSupergrid = True
         elif opt in ("--clip"):
             useClipping = True
-        elif opt in ("--plot"):
+        elif opt in ("--plot_global"):
+            plotGlobal = True
+        elif opt in ("--plot_figures"):
             plotem = True
             plotFilename = arg
-        elif opt in ("--output_dir="):
+        elif opt in ("--land_mask_file"):
+            landmaskFilename = arg
+        elif opt in ("--land_mask_depth"):
+            landmaskDepth = float(arg)
+        elif opt in ("--output_dir"):
             prefixOutDirectory = arg
         elif opt in ("--no_changing_meta"):
             no_changing_meta = True
         elif opt in ("--open_channels"):
             open_channels = True
+        elif opt in ("--apply_ice9"):
+            applyIce9 = True
         elif opt in ("--max_mb"):
             max_mb = int(arg)
         else:
@@ -596,19 +636,42 @@ def main(argv):
     hstd_refsamp = undo_break_array_to_blocks(Hstdlist, xb, yb, useSupergrid=useSupergrid)
     hmin_refsamp = undo_break_array_to_blocks(Hminlist, xb, yb, useSupergrid=useSupergrid)
     hmax_refsamp = undo_break_array_to_blocks(Hmaxlist, xb, yb, useSupergrid=useSupergrid)
-    #pdb.set_trace()
+
+    auxData = xr.Dataset()
+    auxOpts = {}
+
+    auxOpts['applyLandmask'] = False
+
+    # Apply existing land_mask to newly computed depth field
+    if landmaskFilename:
+        if os.path.isfile(landmaskFilename):
+            print("Applying land mask:", landmaskFilename)
+            print("Masking depth:", landmaskDepth)
+            land_mask = xr.open_dataset(landmaskFilename)
+            auxData['land_mask'] = land_mask['mask'].copy()
+            auxOpts['landmaskDepth'] = landmaskDepth
+            auxOpts['applyLandmask'] = True
+            #pdb.set_trace()
+
+    # Apply ice9 algorithm
+    if applyIce9:
+        pass
+        #pdb.set_trace()
+
     if not(useSupergrid):
         write_topog(height_refsamp, hstd_refsamp, hmin_refsamp,
                 hmax_refsamp, grid_lon, grid_lat,
                 fnam=outputfilename, fdir=prefixOutDirectory,
                 description=desc, history=hist, source=source,
-                no_changing_meta=no_changing_meta)
+                no_changing_meta=no_changing_meta,
+                auxData=auxData, auxOpts=auxOpts)
     else:
         write_topog(height_refsamp, hstd_refsamp, hmin_refsamp,
                 hmax_refsamp, targ_lon, targ_lat,
                 fnam=outputfilename, fdir=prefixOutDirectory,
                 description=desc, history=hist, source=source,
-                no_changing_meta=no_changing_meta)
+                no_changing_meta=no_changing_meta,
+                auxData=auxData, auxOpts=auxOpts)
 
     #Niki: Why isn't h periodic in x?  I.e., height_refsamp[:,0] != height_refsamp[:,-1]
     print(" Periodicity test  : ", height_refsamp[0,0] , height_refsamp[0,-1])
@@ -616,37 +679,57 @@ def main(argv):
     toc = time.perf_counter()
     print(f"It took {toc - tic:0.4f} seconds on platform", host)
 
+    # NOTE: These plots are unaffected by changes in write_topog()
     if (plotem):
+        print("Plotting figures...")
         import matplotlib.pyplot as plt
+        import matplotlib as mpl
         import pylab as pl
         from IPython import display
         import cartopy
 
-        plt.figure(figsize=(10,10))
-        ax = plt.subplot(111, projection=cartopy.crs.NearsidePerspective(central_latitude=90))
-        ax.set_global()
+        # (width, height)
+        plt.figure(figsize=(10, 8))
+        cmapName = 'BrBG'
+        if plotGlobal:
+            ax = plt.subplot(111, projection=cartopy.crs.NearsidePerspective(central_latitude=90))
+            ax.set_global()
+        else:
+            ax = plt.subplot(111, projection=cartopy.crs.NearsidePerspective(central_latitude=90, central_longitude=180))
+
+        if setExtent:
+            ax.set_extent(mapExtent, cartopy.crs.PlateCarree())
         ax.stock_img()
         ax.coastlines()
         ax.gridlines()
-        im = ax.pcolormesh(targ_lon, targ_lat, height_refsamp, transform=cartopy.crs.PlateCarree())
-        plt.colorbar(im,ax=ax);
+        normVals = mpl.colors.Normalize(vmin=-100, vmax=100)
+        #normVals = mpl.colors.CenteredNorm()
+        im = ax.pcolormesh(targ_lon, targ_lat, -height_refsamp, transform=cartopy.crs.PlateCarree(), cmap=cmapName, norm=normVals)
+        plt.colorbar(im, ax=ax, orientation='horizontal', label='depth');
         fpath = "h_" + plotFilename
         if prefixOutDirectory:
             fpath = os.path.join(prefixOutDirectory, fpath)
-        plt.savefig(fpath)
+        plt.savefig(fpath, orientation='landscape')
 
-        plt.figure(figsize=(10,10))
-        ax = plt.subplot(111, projection=cartopy.crs.NearsidePerspective(central_latitude=90))
-        ax.set_global()
+        plt.figure(figsize=(10, 8))
+        cmapName = 'plasma'
+        if plotGlobal:
+           ax = plt.subplot(111, projection=cartopy.crs.NearsidePerspective(central_latitude=90))
+           ax.set_global()
+        else:
+            ax = plt.subplot(111, projection=cartopy.crs.NearsidePerspective(central_latitude=90, central_longitude=180))
+
+        if setExtent:
+            ax.set_extent(mapExtent, cartopy.crs.PlateCarree())
         ax.stock_img()
         ax.coastlines()
         ax.gridlines()
-        im = ax.pcolormesh(targ_lon, targ_lat, hstd_refsamp, transform=cartopy.crs.PlateCarree())
-        plt.colorbar(im,ax=ax);
+        im = ax.pcolormesh(targ_lon, targ_lat, hstd_refsamp, transform=cartopy.crs.PlateCarree(), cmap=cmapName)
+        plt.colorbar(im, ax=ax, orientation='horizontal', label='h std');
         fpath = "r_" + plotFilename
         if prefixOutDirectory:
             fpath = os.path.join(prefixOutDirectory, fpath)
-        plt.savefig(fpath)
+        plt.savefig(fpath, orientation='landscape')
 
 if __name__ == "__main__":
     main(sys.argv[1:])
