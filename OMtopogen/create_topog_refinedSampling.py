@@ -179,6 +179,10 @@ def write_topog(h, hstd, hmin, hmax, xx, yy, fnam=None, fdir=None,
                 fout['wet'] = xr.where(fout['land_mask'] == 0, 1.0, 0.0)
                 fout['wet'].attrs['sha256'] = hashlib.sha256( fout['wet'].data ).hexdigest()
                 fout['depth'] = xr.where(fout['wet'] == 1, fout['depth'], auxOpts['landmaskDepth'])
+
+                print("  Clamping any wet points that show has land to:", auxOpts['wetlandDepth'])
+                fout['depth'] = xr.where(fout['wet'] == 1, xr.where(fout['depth'] < auxOpts['wetlandDepth'], auxOpts['wetlandDepth'], fout['depth']), fout['depth'])
+
                 fout['depth'].attrs['sha256'] = hashlib.sha256( fout['depth'].data ).hexdigest()
 
     #global attributes
@@ -433,6 +437,7 @@ def main(argv):
     landmaskFilename = None
     # This is "depth".  Positive is depth, negative is height.
     landmaskDepth = -9999.0
+    wetlandDepth = 4.0
     applyIce9 = False
     setExtent = False
     mapExtent = [0, 0, 0, 0]
@@ -453,6 +458,7 @@ def main(argv):
                     "output_dir=",
                     "land_mask_file=",
                     "land_mask_depth=",
+                    "wet_land_depth=",
                     "apply_ice9",
                     ])
     except getopt.GetoptError as err:
@@ -492,6 +498,8 @@ def main(argv):
             plotFilename = arg
         elif opt in ("--land_mask_file"):
             landmaskFilename = arg
+        elif opt in ("--wet_land_depth"):
+            wetlandDepth = float(arg)
         elif opt in ("--land_mask_depth"):
             landmaskDepth = float(arg)
         elif opt in ("--output_dir"):
@@ -650,6 +658,7 @@ def main(argv):
             land_mask = xr.open_dataset(landmaskFilename)
             auxData['land_mask'] = land_mask['mask'].copy()
             auxOpts['landmaskDepth'] = landmaskDepth
+            auxOpts['wetlandDepth'] = wetlandDepth
             auxOpts['applyLandmask'] = True
             #pdb.set_trace()
 
